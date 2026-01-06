@@ -13,6 +13,8 @@
     body {
       font-family: 'Inter', sans-serif;
       background-color: #f8fafc;
+      margin: 0;
+      padding: 0;
     }
     .custom-scrollbar::-webkit-scrollbar {
       width: 4px;
@@ -23,6 +25,14 @@
     .custom-scrollbar::-webkit-scrollbar-thumb {
       background: #cbd5e1;
       border-radius: 10px;
+    }
+    /* Simple animation for mounting */
+    .animate-in {
+      animation: fadeIn 0.4s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
     }
   </style>
 <script type="importmap">

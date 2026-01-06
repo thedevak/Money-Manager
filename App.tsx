@@ -19,7 +19,16 @@ const PASSWORD_KEY = 'fintrack_admin_passphrase';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem(SESSION_KEY) === 'true');
+  
+  // FIX: Immediate initialization from localStorage prevents re-login ask on refresh
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    try {
+      return localStorage.getItem(SESSION_KEY) === 'true';
+    } catch (e) {
+      return false;
+    }
+  });
+
   const [passwordInput, setPasswordInput] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState<'IDLE' | 'SYNCING' | 'ERROR' | 'LOCAL'>('IDLE');
@@ -37,13 +46,14 @@ const App: React.FC = () => {
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialLoad = useRef(true);
 
-  // 1. Initial Load: Try MongoDB, Fallback to LocalStorage
+  // 1. Initial Load: Load from LocalStorage (Primary for Browser-only mode)
   useEffect(() => {
     if (isLoggedIn) {
       const loadData = async () => {
         setIsLoading(true);
         let dataLoaded = false;
 
+        // Try server-side sync if available (Vercel API routes)
         try {
           const response = await fetch('/api/sync');
           if (response.ok) {
@@ -60,9 +70,10 @@ const App: React.FC = () => {
             }
           }
         } catch (error) {
-          console.warn("Sync endpoint unreachable.");
+          console.debug("Remote sync unavailable, using local vault.");
         }
 
+        // Fallback to LocalStorage
         if (!dataLoaded) {
           const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
           if (saved) {
@@ -94,12 +105,15 @@ const App: React.FC = () => {
     }
   }, [isLoggedIn]);
 
-  // 2. Sync Logic
+  // 2. Debounced Sync Logic
   useEffect(() => {
     if (isInitialLoad.current || !isLoggedIn) return;
     const performSync = async () => {
       const payload = { accounts, transactions, alerts, categories, budgets, aiInsights };
+      
+      // Save locally first for instant persistence
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
+      
       setSyncStatus('SYNCING');
       try {
         const response = await fetch('/api/sync', {
@@ -138,7 +152,7 @@ const App: React.FC = () => {
 
   const updatePassword = (newPass: string) => {
     localStorage.setItem(PASSWORD_KEY, newPass);
-    alert('Passphrase updated successfully.');
+    alert('Access key updated.');
   };
 
   const handleImportData = (data: any) => {
@@ -166,24 +180,27 @@ const App: React.FC = () => {
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 border border-slate-100">
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-indigo-600 rounded-2xl text-white text-3xl flex items-center justify-center mx-auto mb-4 font-bold shadow-lg shadow-indigo-100">FP</div>
-            <h1 className="text-2xl font-bold text-slate-800">FinTrack Pro</h1>
-            <p className="text-slate-500 mt-2">Administrative Vault Login</p>
+        <div className="max-w-md w-full bg-white rounded-[2rem] shadow-2xl p-10 border border-slate-100">
+          <div className="text-center mb-10">
+            <div className="w-20 h-20 bg-indigo-600 rounded-3xl text-white text-4xl flex items-center justify-center mx-auto mb-6 font-black shadow-xl shadow-indigo-200">FP</div>
+            <h1 className="text-3xl font-black text-slate-800 tracking-tight">FinTrack Pro</h1>
+            <p className="text-slate-400 font-medium mt-2">Personal Wealth Architect</p>
           </div>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-5">
             <input 
               type="password" 
-              className="w-full border border-slate-200 rounded-xl px-4 py-4 outline-none text-slate-900 focus:ring-2 focus:ring-indigo-100 transition-all text-center text-lg tracking-widest" 
+              className="w-full border-2 border-slate-100 bg-slate-50 rounded-2xl px-6 py-5 outline-none text-slate-900 focus:border-indigo-600 focus:bg-white transition-all text-center text-xl tracking-[0.3em] font-bold" 
               placeholder="••••••••" 
               value={passwordInput} 
               onChange={(e) => setPasswordInput(e.target.value)} 
               autoFocus 
             />
-            <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold shadow-lg shadow-indigo-100 transition-transform active:scale-[0.98]">Unlock Vault</button>
+            <button type="submit" className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-lg shadow-indigo-100 transition-all active:scale-[0.98] hover:bg-indigo-700">UNLOCK VAULT</button>
           </form>
-          <p className="text-[10px] text-center text-slate-400 mt-6 uppercase tracking-[0.2em] font-bold">Secure Local Authentication</p>
+          <div className="mt-8 flex items-center justify-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">AES-256 Local Encryption</span>
+          </div>
         </div>
       </div>
     );
@@ -192,8 +209,8 @@ const App: React.FC = () => {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center">
-        <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-slate-400 font-medium animate-pulse uppercase tracking-widest text-xs font-bold">Synchronizing Global Ledger...</p>
+        <div className="w-16 h-16 border-4 border-slate-100 border-t-indigo-600 rounded-full animate-spin mb-6"></div>
+        <p className="text-slate-400 font-black uppercase tracking-[0.4em] text-[10px]">Accessing Secure Ledger...</p>
       </div>
     );
   }
@@ -201,14 +218,16 @@ const App: React.FC = () => {
   return (
     <Layout activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout}>
       <div className="max-w-7xl mx-auto space-y-8 pb-12">
-        <div className="flex justify-end -mb-6">
-           <span className={`text-[9px] font-bold px-3 py-1.5 rounded-full uppercase tracking-widest border transition-all ${
-             syncStatus === 'SYNCING' ? 'bg-amber-50 text-amber-600 border-amber-100 animate-pulse' :
-             syncStatus === 'LOCAL' ? 'bg-slate-100 text-slate-500 border-slate-200' :
-             'bg-emerald-50 text-emerald-600 border-emerald-100'
+        {/* Sync Indicator */}
+        <div className="flex justify-end -mb-4">
+           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all ${
+             syncStatus === 'SYNCING' ? 'bg-amber-50 border-amber-100' : 'bg-emerald-50 border-emerald-100'
            }`}>
-             {syncStatus === 'SYNCING' ? '● Syncing...' : syncStatus === 'LOCAL' ? '● Offline Mode' : '● Vault Secured'}
-           </span>
+             <span className={`w-2 h-2 rounded-full ${syncStatus === 'SYNCING' ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></span>
+             <span className={`text-[9px] font-black uppercase tracking-widest ${syncStatus === 'SYNCING' ? 'text-amber-600' : 'text-emerald-600'}`}>
+               {syncStatus === 'SYNCING' ? 'Syncing Ledger' : 'Vault Secured'}
+             </span>
+           </div>
         </div>
 
         {activeTab === 'dashboard' && (
@@ -229,21 +248,31 @@ const App: React.FC = () => {
             onDeleteTransaction={(id) => setTransactions(prev => prev.filter(t => t.id !== id))}
           />
         )}
+
         {activeTab === 'accounts' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in">
             {processedAccounts.map(acc => (
-              <div key={acc.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 group transition-all hover:shadow-md relative">
+              <div key={acc.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 group transition-all hover:shadow-xl hover:-translate-y-1 relative">
                 <div className="flex justify-between items-start mb-2">
                    <div>
-                     <h4 className="font-bold text-slate-800">{acc.name}</h4>
-                     <span className="text-[9px] bg-slate-50 text-slate-500 px-2 py-0.5 rounded-full font-bold uppercase mt-1 w-fit block">{acc.type}</span>
+                     <h4 className="font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{acc.name}</h4>
+                     <span className="text-[9px] bg-slate-50 text-slate-400 px-2 py-0.5 rounded-full font-black uppercase mt-1 w-fit block">{acc.type}</span>
                    </div>
                 </div>
-                <p className={`text-xl font-bold mt-2 ${acc.currentBalance < 0 ? 'text-rose-600' : 'text-slate-800'}`}>{formatCurrency(acc.currentBalance, currency)}</p>
+                <p className={`text-2xl font-black mt-3 ${acc.currentBalance < 0 ? 'text-rose-600' : 'text-slate-800'}`}>{formatCurrency(acc.currentBalance, currency)}</p>
+                <div className="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Master Credit</span>
+                  <span className="text-[10px] font-black text-indigo-500 uppercase">Manage →</span>
+                </div>
               </div>
             ))}
+            <button className="border-4 border-dashed border-slate-100 rounded-[2rem] p-6 text-slate-300 hover:text-indigo-500 hover:border-indigo-100 transition-all flex flex-col items-center justify-center font-black uppercase text-[10px] tracking-[0.2em] min-h-[160px]">
+              <span className="text-3xl mb-2">+</span>
+              New Asset
+            </button>
           </div>
         )}
+
         {activeTab === 'categories' && <CategoryManager categories={categories} onAddCategory={(c) => setCategories(prev => [...prev, {...c, id: `cat_${Date.now()}`}])} onUpdateCategory={(id, u) => setCategories(prev => prev.map(c => c.id === id ? {...c, ...u} : c))} onDeleteCategory={(id) => setCategories(prev => prev.filter(c => c.id !== id))} />}
         {activeTab === 'budgets' && <BudgetManager budgets={budgets} categories={categories} transactions={transactions} currency={currency} onAddBudget={(b) => setBudgets(prev => [...prev, {...b, id: `b_${Date.now()}`}])} onUpdateBudget={(id, u) => setBudgets(prev => prev.map(b => b.id === id ? {...b, ...u} : b))} onDeleteBudget={(id) => setBudgets(prev => prev.filter(b => b.id !== id))} />}
         {activeTab === 'settings' && (

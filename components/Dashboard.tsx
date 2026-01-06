@@ -11,14 +11,19 @@ interface DashboardProps {
   accounts: Account[];
   transactions: Transaction[];
   alerts: DueAlert[];
-  categories: Category[]; // Added categories prop to resolve parent names
+  categories: Category[];
   currency: string;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ accounts, transactions, alerts, categories, currency }) => {
   const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'];
 
-  // 1. Calculations: Stat Cards
+  // Current date markers
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  // 1. Calculations: Live Stat Cards
   const availableBalance = useMemo(() => {
     return accounts
       .filter(acc => acc.type !== AccountType.CREDIT_CARD && acc.type !== AccountType.LOAN && acc.type !== AccountType.EMI)
@@ -32,10 +37,6 @@ const Dashboard: React.FC<DashboardProps> = ({ accounts, transactions, alerts, c
   }, [accounts]);
 
   const monthlyStats = useMemo(() => {
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-
     const currentMonthTxs = transactions.filter(tx => {
       const d = new Date(tx.date);
       return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
@@ -50,13 +51,11 @@ const Dashboard: React.FC<DashboardProps> = ({ accounts, transactions, alerts, c
       .reduce((sum, tx) => sum + tx.amount, 0);
 
     return { income, expense, savings: income - expense };
-  }, [transactions]);
+  }, [transactions, currentMonth, currentYear]);
 
   // 2. Calculation: Real Monthly Trend (Last 6 Months)
   const trendData = useMemo(() => {
     const data = [];
-    const now = new Date();
-    
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const m = d.getMonth();
@@ -87,10 +86,6 @@ const Dashboard: React.FC<DashboardProps> = ({ accounts, transactions, alerts, c
 
   // 3. Calculation: Real Expense Breakdown (Current Month)
   const categoryBreakdown = useMemo(() => {
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-
     const currentMonthExpenses = transactions.filter(tx => {
       const d = new Date(tx.date);
       return tx.type === TransactionType.EXPENSE && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
@@ -99,35 +94,36 @@ const Dashboard: React.FC<DashboardProps> = ({ accounts, transactions, alerts, c
     const breakdown: Record<string, number> = {};
 
     currentMonthExpenses.forEach(tx => {
-      // Find the parent category for accurate grouping
       let cat = categories.find(c => c.id === tx.categoryId);
+      // Map sub-categories to parent for high-level chart
       if (cat?.parentId) {
         cat = categories.find(c => c.id === cat?.parentId);
       }
-      const label = cat?.name || 'Uncategorized';
+      const label = cat?.name || 'Other';
       breakdown[label] = (breakdown[label] || 0) + tx.amount;
     });
 
     return Object.entries(breakdown)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [transactions, categories]);
+  }, [transactions, categories, currentMonth, currentYear]);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      {/* Top Stat Cards */}
+    <div className="space-y-8 animate-in">
+      {/* Top Stat Cards - Live Data */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Total Available" amount={availableBalance} color="text-indigo-600" currency={currency} />
-        <StatCard title="Credit Card Debt" amount={totalCreditDebt} color="text-rose-600" currency={currency} />
+        <StatCard title="Total Liquidity" amount={availableBalance} color="text-indigo-600" currency={currency} />
+        <StatCard title="Total Debt" amount={totalCreditDebt} color="text-rose-600" currency={currency} />
         <StatCard title="Monthly Income" amount={monthlyStats.income} color="text-emerald-600" currency={currency} />
-        <StatCard title="Monthly Expense" amount={monthlyStats.expense} color="text-amber-600" currency={currency} />
+        <StatCard title="Monthly Spending" amount={monthlyStats.expense} color="text-amber-600" currency={currency} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Trend Chart - Real History */}
         <div className="lg:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="font-bold text-slate-800">Financial Trajectory</h3>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Last 6 Months</span>
+            <h3 className="font-bold text-slate-800">Income vs. Expense</h3>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Real-time Performance</span>
           </div>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -147,26 +143,27 @@ const Dashboard: React.FC<DashboardProps> = ({ accounts, transactions, alerts, c
           </div>
         </div>
 
+        {/* Real-time Dues */}
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
           <h3 className="font-bold text-slate-800 mb-6 flex items-center justify-between">
-            Payment Calendar
-            <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Upcoming Dues</span>
+            Upcoming Payments
+            <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Live Schedule</span>
           </h3>
-          <div className="space-y-4 flex-1 overflow-y-auto custom-scrollbar">
+          <div className="space-y-3 flex-1 overflow-y-auto custom-scrollbar">
             {alerts.filter(a => !a.isPaid).length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-slate-400 text-center p-4">
-                <span className="text-3xl mb-2">🎉</span>
-                <p className="text-xs font-medium uppercase tracking-tight">All dues cleared</p>
+                <span className="text-3xl mb-2">✅</span>
+                <p className="text-xs font-bold uppercase tracking-tight">No pending dues</p>
               </div>
             ) : (
               alerts.filter(a => !a.isPaid).map(alert => (
-                <div key={alert.id} className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:border-indigo-100 transition-all group">
-                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-lg shadow-sm group-hover:shadow-md transition-shadow">
+                <div key={alert.id} className="flex items-center gap-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-100 hover:border-indigo-100 transition-all group">
+                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-lg shadow-sm border border-slate-50">
                     {alert.type === 'CREDIT_CARD' ? '💳' : alert.type === 'EMI' ? '🏠' : '📡'}
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-bold text-slate-800 leading-tight">{alert.title}</p>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Due: {new Date(alert.dueDate).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}</p>
+                    <p className="text-[13px] font-bold text-slate-800 leading-tight truncate">{alert.title}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">Due: {new Date(alert.dueDate).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-bold text-rose-600">{formatCurrency(alert.amount, currency)}</p>
@@ -179,18 +176,19 @@ const Dashboard: React.FC<DashboardProps> = ({ accounts, transactions, alerts, c
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Real Liquidity Breakdown */}
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
            <div className="flex justify-between items-center mb-6">
-             <h3 className="font-bold text-slate-800">Liquidity Pulse</h3>
-             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Accounts</span>
+             <h3 className="font-bold text-slate-800">Account Health</h3>
+             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Real-time Balances</span>
            </div>
-           <div className="space-y-3">
+           <div className="space-y-2">
              {accounts.map(acc => (
-               <div key={acc.id} className="flex items-center justify-between p-4 rounded-2xl hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100">
+               <div key={acc.id} className="flex items-center justify-between p-3.5 rounded-2xl hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100 group">
                  <div className="flex items-center gap-3">
-                   <div className={`w-2.5 h-2.5 rounded-full ${acc.currentBalance < 0 ? 'bg-rose-500 shadow-sm shadow-rose-200' : 'bg-emerald-500 shadow-sm shadow-emerald-200'}`}></div>
+                   <div className={`w-2 h-2 rounded-full ${acc.currentBalance < 0 ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
                    <div>
-                     <p className="text-sm font-bold text-slate-700">{acc.name}</p>
+                     <p className="text-[13px] font-bold text-slate-700 group-hover:text-indigo-600 transition-colors">{acc.name}</p>
                      <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest">{acc.type}</p>
                    </div>
                  </div>
@@ -202,15 +200,17 @@ const Dashboard: React.FC<DashboardProps> = ({ accounts, transactions, alerts, c
            </div>
         </div>
 
+        {/* Real Spending Distribution */}
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
           <div className="flex justify-between items-center mb-6">
-            <h3 className="font-bold text-slate-800">Expense Distribution</h3>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Current Month</span>
+            <h3 className="font-bold text-slate-800">Expense Allocation</h3>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Month Breakdown</span>
           </div>
           <div className="h-64 flex items-center">
             {categoryBreakdown.length === 0 ? (
-              <div className="w-full text-center text-slate-400 py-12">
-                <p className="text-xs font-bold uppercase tracking-widest">No expenses tracked this month</p>
+              <div className="w-full text-center text-slate-300 py-12 flex flex-col items-center">
+                <span className="text-4xl grayscale opacity-20 mb-2">🍽️</span>
+                <p className="text-[10px] font-bold uppercase tracking-widest">No spending recorded this month</p>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
@@ -219,8 +219,8 @@ const Dashboard: React.FC<DashboardProps> = ({ accounts, transactions, alerts, c
                     data={categoryBreakdown}
                     cx="50%"
                     cy="50%"
-                    innerRadius={60}
-                    outerRadius={85}
+                    innerRadius={55}
+                    outerRadius={80}
                     paddingAngle={8}
                     dataKey="value"
                     stroke="none"
@@ -245,14 +245,14 @@ const Dashboard: React.FC<DashboardProps> = ({ accounts, transactions, alerts, c
 };
 
 const StatCard: React.FC<{ title: string; amount: number; color: string; currency: string }> = ({ title, amount, color, currency }) => (
-  <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col gap-1 transition-all hover:shadow-md cursor-default group">
-    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] mb-1">{title}</p>
+  <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col gap-1 transition-all hover:shadow-md cursor-default">
+    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-1">{title}</p>
     <p className={`text-2xl font-bold ${color} tracking-tight`}>{formatCurrency(amount, currency)}</p>
-    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-50">
-      <div className="h-1 flex-1 bg-slate-50 rounded-full overflow-hidden">
-        <div className={`h-full ${color.replace('text', 'bg')} opacity-20`} style={{width: '60%'}}></div>
+    <div className="mt-3 flex items-center gap-1.5">
+      <div className={`h-1 flex-1 bg-slate-50 rounded-full overflow-hidden`}>
+        <div className={`h-full ${color.replace('text', 'bg')} opacity-20`} style={{width: '75%'}}></div>
       </div>
-      <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tight">Active Track</span>
+      <span className="text-[8px] font-bold text-slate-300 uppercase tracking-tighter">Live Audit</span>
     </div>
   </div>
 );
