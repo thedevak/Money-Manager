@@ -1,0 +1,7 @@
+{
+  "name": "FinTrack Pro - Personal Wealth Architect",
+  "description": "A professional-grade personal finance and expense management dashboard with advanced accounting logic, credit card debt tracking, and insightful analytics.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
