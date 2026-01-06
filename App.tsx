@@ -20,8 +20,8 @@ const PASSWORD_KEY = 'fintrack_admin_passphrase';
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  // Fast local-first authentication check
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+  // 1. Initialize authentication state synchronously from localStorage
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
     try {
       return localStorage.getItem(SESSION_KEY) === 'true';
     } catch (e) {
@@ -43,41 +43,48 @@ const App: React.FC = () => {
   const [isFetchingAI, setIsFetchingAI] = useState(false);
   const isInitialLoad = useRef(true);
 
-  // Load logic: Strictly Local Storage
+  // 2. Load financial data from Local Storage immediately after login check
   useEffect(() => {
     if (isLoggedIn) {
-      setIsLoading(true);
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      
-      if (saved) {
-        try {
-          const data = JSON.parse(saved);
-          setAccounts(data.accounts || INITIAL_ACCOUNTS);
-          setTransactions(data.transactions || INITIAL_TRANSACTIONS);
-          setAlerts(data.alerts || INITIAL_ALERTS);
-          setCategories(data.categories || INITIAL_CATEGORIES);
-          setBudgets(data.budgets || INITIAL_BUDGETS);
-          setAiInsights(data.aiInsights || []);
-        } catch (e) {
-          console.warn("Vault data corrupted, falling back to defaults.");
+      const loadVault = () => {
+        setIsLoading(true);
+        const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+        
+        if (saved) {
+          try {
+            const data = JSON.parse(saved);
+            setAccounts(data.accounts || INITIAL_ACCOUNTS);
+            setTransactions(data.transactions || INITIAL_TRANSACTIONS);
+            setAlerts(data.alerts || INITIAL_ALERTS);
+            setCategories(data.categories || INITIAL_CATEGORIES);
+            setBudgets(data.budgets || INITIAL_BUDGETS);
+            setAiInsights(data.aiInsights || []);
+          } catch (e) {
+            console.warn("Vault data corrupted, falling back to defaults.");
+            setAccounts(INITIAL_ACCOUNTS);
+            setTransactions(INITIAL_TRANSACTIONS);
+            setCategories(INITIAL_CATEGORIES);
+          }
+        } else {
+          // New User Setup
           setAccounts(INITIAL_ACCOUNTS);
           setTransactions(INITIAL_TRANSACTIONS);
+          setAlerts(INITIAL_ALERTS);
           setCategories(INITIAL_CATEGORIES);
+          setBudgets(INITIAL_BUDGETS);
         }
-      } else {
-        setAccounts(INITIAL_ACCOUNTS);
-        setTransactions(INITIAL_TRANSACTIONS);
-        setAlerts(INITIAL_ALERTS);
-        setCategories(INITIAL_CATEGORIES);
-        setBudgets(INITIAL_BUDGETS);
-      }
+        
+        setIsLoading(false);
+        isInitialLoad.current = false;
+      };
       
+      loadVault();
+    } else {
       setIsLoading(false);
-      isInitialLoad.current = false;
     }
   }, [isLoggedIn]);
 
-  // Save logic: Direct LocalStorage update on every state change
+  // 3. Persist data changes to LocalStorage
   useEffect(() => {
     if (isInitialLoad.current || !isLoggedIn) return;
     
@@ -98,16 +105,16 @@ const App: React.FC = () => {
     e.preventDefault();
     const storedPass = localStorage.getItem(PASSWORD_KEY) || 'admin123';
     if (passwordInput === storedPass) {
-      setIsLoggedIn(true);
       localStorage.setItem(SESSION_KEY, 'true');
+      setIsLoggedIn(true);
     } else {
-      alert('Unauthorized access attempt.');
+      alert('Unauthorized access attempt. Hint: admin123');
     }
   };
 
   const handleLogout = () => {
-    setIsLoggedIn(false);
     localStorage.removeItem(SESSION_KEY);
+    setIsLoggedIn(false);
   };
 
   const updatePassword = (newPass: string) => {
@@ -125,13 +132,15 @@ const App: React.FC = () => {
   };
 
   const resetAllData = () => {
-    setAccounts(INITIAL_ACCOUNTS);
-    setTransactions(INITIAL_TRANSACTIONS);
-    setCategories(INITIAL_CATEGORIES);
-    setBudgets(INITIAL_BUDGETS);
-    setAlerts(INITIAL_ALERTS);
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
-    alert('Vault data has been wiped.');
+    if (window.confirm("ARE YOU SURE? This will permanently delete all local financial records.")) {
+      setAccounts(INITIAL_ACCOUNTS);
+      setTransactions(INITIAL_TRANSACTIONS);
+      setCategories(INITIAL_CATEGORIES);
+      setBudgets(INITIAL_BUDGETS);
+      setAlerts(INITIAL_ALERTS);
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+      alert('Vault data has been wiped.');
+    }
   };
 
   const fetchRealInsights = async () => {
@@ -140,7 +149,7 @@ const App: React.FC = () => {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: "Financial insights for India today: Repo rates, inflation trends, and 3 personal finance tips.",
+        contents: "Financial insights for India today: Market trends, inflation, and 3 actionable wealth tips.",
         config: { tools: [{ googleSearch: {} }] },
       });
       const newInsight: AIInsight = {
@@ -157,44 +166,50 @@ const App: React.FC = () => {
     }
   };
 
+  // Render Loading State
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center">
+        <div className="w-16 h-16 border-4 border-slate-100 border-t-indigo-600 rounded-full animate-spin mb-6"></div>
+        <p className="text-slate-400 font-black uppercase tracking-[0.4em] text-[10px]">Unlocking Secure Ledger...</p>
+      </div>
+    );
+  }
+
+  // Render Login Screen
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-[2.5rem] shadow-2xl p-10 border border-slate-100">
+        <div className="max-w-md w-full bg-white rounded-[2.5rem] shadow-2xl p-10 border border-slate-100 animate-in">
           <div className="text-center mb-10">
             <div className="w-20 h-20 bg-indigo-600 rounded-3xl text-white text-4xl flex items-center justify-center mx-auto mb-6 font-black shadow-xl shadow-indigo-200">FP</div>
             <h1 className="text-3xl font-black text-slate-800 tracking-tight">FinTrack Pro</h1>
-            <p className="text-slate-400 font-medium mt-2">Private Local Ledger</p>
+            <p className="text-slate-400 font-medium mt-2">Personal Wealth Architect</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-6">
-            <input 
-              type="password" 
-              className="w-full border-2 border-slate-100 bg-slate-50 rounded-2xl px-6 py-5 outline-none text-slate-900 focus:border-indigo-600 focus:bg-white transition-all text-center text-xl tracking-[0.4em] font-bold" 
-              placeholder="••••••••" 
-              value={passwordInput} 
-              onChange={(e) => setPasswordInput(e.target.value)} 
-              autoFocus 
-            />
-            <button type="submit" className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-lg shadow-indigo-100 transition-all active:scale-[0.98] hover:bg-indigo-700 uppercase tracking-widest">Enter Vault</button>
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Vault Key</label>
+              <input 
+                type="password" 
+                className="w-full border-2 border-slate-100 bg-slate-50 rounded-2xl px-6 py-5 outline-none text-slate-900 focus:border-indigo-600 focus:bg-white transition-all text-center text-xl tracking-[0.4em] font-bold" 
+                placeholder="••••••••" 
+                value={passwordInput} 
+                onChange={(e) => setPasswordInput(e.target.value)} 
+                autoFocus 
+              />
+            </div>
+            <button type="submit" className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-lg shadow-indigo-100 transition-all active:scale-[0.98] hover:bg-indigo-700 uppercase tracking-widest">Open Ledger</button>
           </form>
           <div className="mt-10 flex items-center justify-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Device-Only Storage</span>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">AES-256 Client Isolation</span>
           </div>
         </div>
       </div>
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-white flex flex-col items-center justify-center">
-        <div className="w-16 h-16 border-4 border-slate-100 border-t-indigo-600 rounded-full animate-spin mb-6"></div>
-        <p className="text-slate-400 font-black uppercase tracking-[0.4em] text-[10px]">Loading Vault...</p>
-      </div>
-    );
-  }
-
+  // Render Main App
   return (
     <Layout activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout}>
       <div className="max-w-7xl mx-auto space-y-8 pb-12">
