@@ -31,7 +31,6 @@ const App: React.FC = () => {
 
   const [passwordInput, setPasswordInput] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [syncStatus, setSyncStatus] = useState<'IDLE' | 'SYNCING' | 'ERROR' | 'LOCAL'>('IDLE');
   const currency = 'INR';
 
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -42,95 +41,55 @@ const App: React.FC = () => {
   const [aiInsights, setAiInsights] = useState<AIInsight[]>([]);
 
   const [isFetchingAI, setIsFetchingAI] = useState(false);
-  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialLoad = useRef(true);
 
-  // Load logic: Local-first, then Sync
+  // Load logic: Strictly Local Storage
   useEffect(() => {
     if (isLoggedIn) {
-      const loadData = async () => {
-        setIsLoading(true);
-        let dataLoaded = false;
-
-        // 1. Instant load from local storage
-        const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-        if (saved) {
-          try {
-            const data = JSON.parse(saved);
-            setAccounts(data.accounts || INITIAL_ACCOUNTS);
-            setTransactions(data.transactions || INITIAL_TRANSACTIONS);
-            setAlerts(data.alerts || INITIAL_ALERTS);
-            setCategories(data.categories || INITIAL_CATEGORIES);
-            setBudgets(data.budgets || INITIAL_BUDGETS);
-            setAiInsights(data.aiInsights || []);
-            setSyncStatus('LOCAL');
-            dataLoaded = true;
-          } catch (e) {
-            console.warn("Local cache corrupt.");
-          }
-        }
-
-        // 2. Background sync from server
+      setIsLoading(true);
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      
+      if (saved) {
         try {
-          const response = await fetch('/api/sync');
-          if (response.ok) {
-            const data = await response.json();
-            if (data && data.accounts) {
-              setAccounts(data.accounts);
-              setTransactions(data.transactions || []);
-              setAlerts(data.alerts || INITIAL_ALERTS);
-              setCategories(data.categories || INITIAL_CATEGORIES);
-              setBudgets(data.budgets || []);
-              setAiInsights(data.aiInsights || []);
-              setSyncStatus('IDLE');
-              dataLoaded = true;
-            }
-          }
-        } catch (error) {
-          console.debug("Offline Mode Active.");
-        }
-
-        if (!dataLoaded) {
+          const data = JSON.parse(saved);
+          setAccounts(data.accounts || INITIAL_ACCOUNTS);
+          setTransactions(data.transactions || INITIAL_TRANSACTIONS);
+          setAlerts(data.alerts || INITIAL_ALERTS);
+          setCategories(data.categories || INITIAL_CATEGORIES);
+          setBudgets(data.budgets || INITIAL_BUDGETS);
+          setAiInsights(data.aiInsights || []);
+        } catch (e) {
+          console.warn("Vault data corrupted, falling back to defaults.");
           setAccounts(INITIAL_ACCOUNTS);
           setTransactions(INITIAL_TRANSACTIONS);
-          setAlerts(INITIAL_ALERTS);
           setCategories(INITIAL_CATEGORIES);
-          setBudgets(INITIAL_BUDGETS);
-          setSyncStatus('LOCAL');
         }
-
-        setIsLoading(false);
-        isInitialLoad.current = false;
-      };
-      loadData();
+      } else {
+        setAccounts(INITIAL_ACCOUNTS);
+        setTransactions(INITIAL_TRANSACTIONS);
+        setAlerts(INITIAL_ALERTS);
+        setCategories(INITIAL_CATEGORIES);
+        setBudgets(INITIAL_BUDGETS);
+      }
+      
+      setIsLoading(false);
+      isInitialLoad.current = false;
     }
   }, [isLoggedIn]);
 
-  // Save logic: Debounced Local + Remote Sync
+  // Save logic: Direct LocalStorage update on every state change
   useEffect(() => {
     if (isInitialLoad.current || !isLoggedIn) return;
-
-    const performSync = async () => {
-      const payload = { accounts, transactions, alerts, categories, budgets, aiInsights };
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
-      
-      setSyncStatus('SYNCING');
-      try {
-        const response = await fetch('/api/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (response.ok) setSyncStatus('IDLE');
-        else throw new Error();
-      } catch (error) {
-        setSyncStatus('LOCAL');
-      }
+    
+    const payload = { 
+      accounts, 
+      transactions, 
+      alerts, 
+      categories, 
+      budgets, 
+      aiInsights 
     };
-
-    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
-    syncTimerRef.current = setTimeout(performSync, 2000);
-    return () => { if (syncTimerRef.current) clearTimeout(syncTimerRef.current); };
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
   }, [accounts, transactions, alerts, categories, budgets, aiInsights, isLoggedIn]);
 
   const processedAccounts = useMemo(() => recalculateBalances(accounts, transactions), [accounts, transactions]);
@@ -142,7 +101,7 @@ const App: React.FC = () => {
       setIsLoggedIn(true);
       localStorage.setItem(SESSION_KEY, 'true');
     } else {
-      alert('Unauthorized Access Attempt.');
+      alert('Unauthorized access attempt.');
     }
   };
 
@@ -153,7 +112,7 @@ const App: React.FC = () => {
 
   const updatePassword = (newPass: string) => {
     localStorage.setItem(PASSWORD_KEY, newPass);
-    alert('Vault Access Key Secured.');
+    alert('Access Key updated locally.');
   };
 
   const handleImportData = (data: any) => {
@@ -161,7 +120,7 @@ const App: React.FC = () => {
       setAccounts(data.accounts);
       setTransactions(data.transactions || []);
       setCategories(data.categories || INITIAL_CATEGORIES);
-      alert('Ledger Restored.');
+      alert('Vault data imported and saved.');
     }
   };
 
@@ -169,28 +128,30 @@ const App: React.FC = () => {
     setAccounts(INITIAL_ACCOUNTS);
     setTransactions(INITIAL_TRANSACTIONS);
     setCategories(INITIAL_CATEGORIES);
+    setBudgets(INITIAL_BUDGETS);
+    setAlerts(INITIAL_ALERTS);
     localStorage.removeItem(LOCAL_STORAGE_KEY);
-    alert('Vault Wiped.');
+    alert('Vault data has been wiped.');
   };
 
   const fetchRealInsights = async () => {
     setIsFetchingAI(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: (process.env as any).API_KEY || '' });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: "India's financial status today: Repo rate, Nifty 50, and Top 3 money tips.",
+        contents: "Financial insights for India today: Repo rates, inflation trends, and 3 personal finance tips.",
         config: { tools: [{ googleSearch: {} }] },
       });
       const newInsight: AIInsight = {
         id: Date.now().toString(),
         text: response.text || "No insights available.",
-        sources: response.candidates?.[0]?.groundingMetadata?.groundingChunks?.filter(c => c.web).map(c => ({ title: c.web!.title || 'Market Source', uri: c.web!.uri })) || [],
+        sources: response.candidates?.[0]?.groundingMetadata?.groundingChunks?.filter(c => c.web).map(c => ({ title: c.web!.title || 'Source', uri: c.web!.uri })) || [],
         timestamp: new Date().toISOString()
       };
       setAiInsights(prev => [newInsight, ...prev].slice(0, 3));
     } catch (e) {
-      console.error(e);
+      console.error("AI Insight Error:", e);
     } finally {
       setIsFetchingAI(false);
     }
@@ -203,7 +164,7 @@ const App: React.FC = () => {
           <div className="text-center mb-10">
             <div className="w-20 h-20 bg-indigo-600 rounded-3xl text-white text-4xl flex items-center justify-center mx-auto mb-6 font-black shadow-xl shadow-indigo-200">FP</div>
             <h1 className="text-3xl font-black text-slate-800 tracking-tight">FinTrack Pro</h1>
-            <p className="text-slate-400 font-medium mt-2">Personal Wealth Ledger</p>
+            <p className="text-slate-400 font-medium mt-2">Private Local Ledger</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-6">
             <input 
@@ -214,11 +175,11 @@ const App: React.FC = () => {
               onChange={(e) => setPasswordInput(e.target.value)} 
               autoFocus 
             />
-            <button type="submit" className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-lg shadow-indigo-100 transition-all active:scale-[0.98] hover:bg-indigo-700 uppercase tracking-widest">Open Vault</button>
+            <button type="submit" className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-lg shadow-indigo-100 transition-all active:scale-[0.98] hover:bg-indigo-700 uppercase tracking-widest">Enter Vault</button>
           </form>
           <div className="mt-10 flex items-center justify-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Encrypted Session</span>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Device-Only Storage</span>
           </div>
         </div>
       </div>
@@ -229,7 +190,7 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center">
         <div className="w-16 h-16 border-4 border-slate-100 border-t-indigo-600 rounded-full animate-spin mb-6"></div>
-        <p className="text-slate-400 font-black uppercase tracking-[0.4em] text-[10px]">Accessing Secure Ledger...</p>
+        <p className="text-slate-400 font-black uppercase tracking-[0.4em] text-[10px]">Loading Vault...</p>
       </div>
     );
   }
@@ -238,13 +199,9 @@ const App: React.FC = () => {
     <Layout activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout}>
       <div className="max-w-7xl mx-auto space-y-8 pb-12">
         <div className="flex justify-end -mb-4">
-           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all ${
-             syncStatus === 'SYNCING' ? 'bg-amber-50 border-amber-100' : 'bg-emerald-50 border-emerald-100'
-           }`}>
-             <span className={`w-2 h-2 rounded-full ${syncStatus === 'SYNCING' ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></span>
-             <span className={`text-[9px] font-black uppercase tracking-widest ${syncStatus === 'SYNCING' ? 'text-amber-600' : 'text-emerald-600'}`}>
-               {syncStatus === 'SYNCING' ? 'Syncing Ledger' : 'Vault Secured'}
-             </span>
+           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border bg-emerald-50 border-emerald-100">
+             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+             <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Local Vault Secured</span>
            </div>
         </div>
 
@@ -300,7 +257,6 @@ const App: React.FC = () => {
             onResetData={resetAllData} 
             onUpdatePassword={updatePassword}
             onImportData={handleImportData}
-            syncStatus={syncStatus} 
           />
         )}
       </div>

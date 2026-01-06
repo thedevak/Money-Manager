@@ -9,7 +9,6 @@ interface SettingsProps {
   onResetData: () => void;
   onUpdatePassword: (newPass: string) => void;
   onImportData: (data: any) => void;
-  syncStatus: string;
 }
 
 const Settings: React.FC<SettingsProps> = ({ 
@@ -18,8 +17,7 @@ const Settings: React.FC<SettingsProps> = ({
   categories, 
   onResetData,
   onUpdatePassword,
-  onImportData,
-  syncStatus
+  onImportData
 }) => {
   const [newPass, setNewPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
@@ -51,7 +49,6 @@ const Settings: React.FC<SettingsProps> = ({
       }
     };
     reader.readAsText(file);
-    // Reset file input
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -80,21 +77,20 @@ const Settings: React.FC<SettingsProps> = ({
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm flex items-center gap-6">
+    <div className="max-w-4xl mx-auto space-y-8 animate-in duration-500">
+      <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm flex items-center gap-6">
         <div className="w-20 h-20 rounded-2xl bg-indigo-600 flex items-center justify-center text-3xl text-white font-bold shadow-lg shadow-indigo-100">AD</div>
         <div>
           <h3 className="text-xl font-bold text-slate-800">Master Administrator</h3>
           <p className="text-slate-500 text-sm">FinTrack Pro Persistence Engine</p>
           <div className="mt-2 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Authenticated Session</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Local Session Active</span>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* Security Section */}
         <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
           <h4 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
             <span className="text-lg">🔐</span> Security & Access
@@ -122,10 +118,9 @@ const Settings: React.FC<SettingsProps> = ({
             </div>
             <button type="submit" className="w-full bg-slate-900 text-white py-3 rounded-xl text-xs font-bold hover:bg-black transition-all">Update Access Key</button>
           </form>
-          <p className="text-[10px] text-slate-400 mt-4 italic">Changing the passphrase will update the key required for future logins.</p>
+          <p className="text-[10px] text-slate-400 mt-4 italic">The key is stored on this device only.</p>
         </div>
 
-        {/* Data Management */}
         <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
           <h4 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
             <span className="text-lg">💾</span> Data & Backups
@@ -155,16 +150,16 @@ const Settings: React.FC<SettingsProps> = ({
             <div className="pt-4 mt-2 border-t border-slate-50 flex items-center justify-between">
               <div>
                 <p className="text-[10px] text-rose-600 font-bold uppercase">Critical Action</p>
-                <p className="text-[9px] text-slate-400 uppercase">Wipe all vault data</p>
+                <p className="text-[9px] text-slate-400 uppercase">Wipe device data</p>
               </div>
-              <button onClick={() => confirm("WIPE VAULT? Action cannot be undone.") && onResetData()} className="bg-rose-50 text-rose-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-rose-100">RESET</button>
+              <button onClick={() => confirm("WIPE VAULT? This will clear all local data.") && onResetData()} className="bg-rose-50 text-rose-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-rose-100">RESET</button>
             </div>
           </div>
         </div>
       </div>
 
       <div className="text-center">
-        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-[0.3em]">FinTrack Pro • Secure Architecture v2.5</p>
+        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-[0.3em]">FinTrack Pro • Device Architecture v3.0</p>
       </div>
     </div>
   );
