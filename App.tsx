@@ -20,7 +20,7 @@ const PASSWORD_KEY = 'fintrack_admin_passphrase';
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  // FIX: Immediate initialization from localStorage prevents re-login ask on refresh
+  // Fast local-first authentication check
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
     try {
       return localStorage.getItem(SESSION_KEY) === 'true';
@@ -34,7 +34,6 @@ const App: React.FC = () => {
   const [syncStatus, setSyncStatus] = useState<'IDLE' | 'SYNCING' | 'ERROR' | 'LOCAL'>('IDLE');
   const currency = 'INR';
 
-  // App State
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [alerts, setAlerts] = useState<DueAlert[]>([]);
@@ -46,58 +45,60 @@ const App: React.FC = () => {
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialLoad = useRef(true);
 
-  // 1. Initial Load: Load from LocalStorage (Primary for Browser-only mode)
+  // Load logic: Local-first, then Sync
   useEffect(() => {
     if (isLoggedIn) {
       const loadData = async () => {
         setIsLoading(true);
         let dataLoaded = false;
 
-        // Try server-side sync if available (Vercel API routes)
+        // 1. Instant load from local storage
+        const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (saved) {
+          try {
+            const data = JSON.parse(saved);
+            setAccounts(data.accounts || INITIAL_ACCOUNTS);
+            setTransactions(data.transactions || INITIAL_TRANSACTIONS);
+            setAlerts(data.alerts || INITIAL_ALERTS);
+            setCategories(data.categories || INITIAL_CATEGORIES);
+            setBudgets(data.budgets || INITIAL_BUDGETS);
+            setAiInsights(data.aiInsights || []);
+            setSyncStatus('LOCAL');
+            dataLoaded = true;
+          } catch (e) {
+            console.warn("Local cache corrupt.");
+          }
+        }
+
+        // 2. Background sync from server
         try {
           const response = await fetch('/api/sync');
           if (response.ok) {
             const data = await response.json();
-            if (data.accounts) {
+            if (data && data.accounts) {
               setAccounts(data.accounts);
               setTransactions(data.transactions || []);
-              setAlerts(data.alerts || []);
-              setCategories(data.categories || []);
+              setAlerts(data.alerts || INITIAL_ALERTS);
+              setCategories(data.categories || INITIAL_CATEGORIES);
               setBudgets(data.budgets || []);
               setAiInsights(data.aiInsights || []);
-              dataLoaded = true;
               setSyncStatus('IDLE');
+              dataLoaded = true;
             }
           }
         } catch (error) {
-          console.debug("Remote sync unavailable, using local vault.");
+          console.debug("Offline Mode Active.");
         }
 
-        // Fallback to LocalStorage
         if (!dataLoaded) {
-          const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-          if (saved) {
-            try {
-              const data = JSON.parse(saved);
-              setAccounts(data.accounts || INITIAL_ACCOUNTS);
-              setTransactions(data.transactions || INITIAL_TRANSACTIONS);
-              setAlerts(data.alerts || INITIAL_ALERTS);
-              setCategories(data.categories || INITIAL_CATEGORIES);
-              setBudgets(data.budgets || INITIAL_BUDGETS);
-              setAiInsights(data.aiInsights || []);
-              setSyncStatus('LOCAL');
-            } catch (e) {
-              console.error("Local data corrupted", e);
-            }
-          } else {
-            setAccounts(INITIAL_ACCOUNTS);
-            setTransactions(INITIAL_TRANSACTIONS);
-            setAlerts(INITIAL_ALERTS);
-            setCategories(INITIAL_CATEGORIES);
-            setBudgets(INITIAL_BUDGETS);
-            setSyncStatus('LOCAL');
-          }
+          setAccounts(INITIAL_ACCOUNTS);
+          setTransactions(INITIAL_TRANSACTIONS);
+          setAlerts(INITIAL_ALERTS);
+          setCategories(INITIAL_CATEGORIES);
+          setBudgets(INITIAL_BUDGETS);
+          setSyncStatus('LOCAL');
         }
+
         setIsLoading(false);
         isInitialLoad.current = false;
       };
@@ -105,13 +106,12 @@ const App: React.FC = () => {
     }
   }, [isLoggedIn]);
 
-  // 2. Debounced Sync Logic
+  // Save logic: Debounced Local + Remote Sync
   useEffect(() => {
     if (isInitialLoad.current || !isLoggedIn) return;
+
     const performSync = async () => {
       const payload = { accounts, transactions, alerts, categories, budgets, aiInsights };
-      
-      // Save locally first for instant persistence
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
       
       setSyncStatus('SYNCING');
@@ -127,8 +127,9 @@ const App: React.FC = () => {
         setSyncStatus('LOCAL');
       }
     };
+
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
-    syncTimerRef.current = setTimeout(performSync, 1500);
+    syncTimerRef.current = setTimeout(performSync, 2000);
     return () => { if (syncTimerRef.current) clearTimeout(syncTimerRef.current); };
   }, [accounts, transactions, alerts, categories, budgets, aiInsights, isLoggedIn]);
 
@@ -141,7 +142,7 @@ const App: React.FC = () => {
       setIsLoggedIn(true);
       localStorage.setItem(SESSION_KEY, 'true');
     } else {
-      alert('Invalid passphrase');
+      alert('Unauthorized Access Attempt.');
     }
   };
 
@@ -152,19 +153,15 @@ const App: React.FC = () => {
 
   const updatePassword = (newPass: string) => {
     localStorage.setItem(PASSWORD_KEY, newPass);
-    alert('Access key updated.');
+    alert('Vault Access Key Secured.');
   };
 
   const handleImportData = (data: any) => {
-    if (data.accounts && data.transactions) {
+    if (data && data.accounts) {
       setAccounts(data.accounts);
-      setTransactions(data.transactions);
+      setTransactions(data.transactions || []);
       setCategories(data.categories || INITIAL_CATEGORIES);
-      setBudgets(data.budgets || []);
-      setAlerts(data.alerts || []);
-      alert('Vault restored successfully!');
-    } else {
-      alert('Invalid backup file format.');
+      alert('Ledger Restored.');
     }
   };
 
@@ -172,34 +169,56 @@ const App: React.FC = () => {
     setAccounts(INITIAL_ACCOUNTS);
     setTransactions(INITIAL_TRANSACTIONS);
     setCategories(INITIAL_CATEGORIES);
-    setBudgets(INITIAL_BUDGETS);
-    setAlerts(INITIAL_ALERTS);
     localStorage.removeItem(LOCAL_STORAGE_KEY);
+    alert('Vault Wiped.');
+  };
+
+  const fetchRealInsights = async () => {
+    setIsFetchingAI(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: (process.env as any).API_KEY || '' });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: "India's financial status today: Repo rate, Nifty 50, and Top 3 money tips.",
+        config: { tools: [{ googleSearch: {} }] },
+      });
+      const newInsight: AIInsight = {
+        id: Date.now().toString(),
+        text: response.text || "No insights available.",
+        sources: response.candidates?.[0]?.groundingMetadata?.groundingChunks?.filter(c => c.web).map(c => ({ title: c.web!.title || 'Market Source', uri: c.web!.uri })) || [],
+        timestamp: new Date().toISOString()
+      };
+      setAiInsights(prev => [newInsight, ...prev].slice(0, 3));
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsFetchingAI(false);
+    }
   };
 
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-[2rem] shadow-2xl p-10 border border-slate-100">
+        <div className="max-w-md w-full bg-white rounded-[2.5rem] shadow-2xl p-10 border border-slate-100">
           <div className="text-center mb-10">
             <div className="w-20 h-20 bg-indigo-600 rounded-3xl text-white text-4xl flex items-center justify-center mx-auto mb-6 font-black shadow-xl shadow-indigo-200">FP</div>
             <h1 className="text-3xl font-black text-slate-800 tracking-tight">FinTrack Pro</h1>
-            <p className="text-slate-400 font-medium mt-2">Personal Wealth Architect</p>
+            <p className="text-slate-400 font-medium mt-2">Personal Wealth Ledger</p>
           </div>
-          <form onSubmit={handleLogin} className="space-y-5">
+          <form onSubmit={handleLogin} className="space-y-6">
             <input 
               type="password" 
-              className="w-full border-2 border-slate-100 bg-slate-50 rounded-2xl px-6 py-5 outline-none text-slate-900 focus:border-indigo-600 focus:bg-white transition-all text-center text-xl tracking-[0.3em] font-bold" 
+              className="w-full border-2 border-slate-100 bg-slate-50 rounded-2xl px-6 py-5 outline-none text-slate-900 focus:border-indigo-600 focus:bg-white transition-all text-center text-xl tracking-[0.4em] font-bold" 
               placeholder="••••••••" 
               value={passwordInput} 
               onChange={(e) => setPasswordInput(e.target.value)} 
               autoFocus 
             />
-            <button type="submit" className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-lg shadow-indigo-100 transition-all active:scale-[0.98] hover:bg-indigo-700">UNLOCK VAULT</button>
+            <button type="submit" className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-lg shadow-indigo-100 transition-all active:scale-[0.98] hover:bg-indigo-700 uppercase tracking-widest">Open Vault</button>
           </form>
-          <div className="mt-8 flex items-center justify-center gap-2">
+          <div className="mt-10 flex items-center justify-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">AES-256 Local Encryption</span>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Encrypted Session</span>
           </div>
         </div>
       </div>
@@ -218,7 +237,6 @@ const App: React.FC = () => {
   return (
     <Layout activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout}>
       <div className="max-w-7xl mx-auto space-y-8 pb-12">
-        {/* Sync Indicator */}
         <div className="flex justify-end -mb-4">
            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all ${
              syncStatus === 'SYNCING' ? 'bg-amber-50 border-amber-100' : 'bg-emerald-50 border-emerald-100'
@@ -231,13 +249,19 @@ const App: React.FC = () => {
         </div>
 
         {activeTab === 'dashboard' && (
-          <Dashboard 
-            accounts={processedAccounts} 
-            transactions={transactions} 
-            alerts={alerts} 
-            categories={categories}
-            currency={currency} 
-          />
+          <div className="space-y-8">
+            <Dashboard 
+              accounts={processedAccounts} 
+              transactions={transactions} 
+              alerts={alerts} 
+              categories={categories}
+              currency={currency} 
+            />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <AIInsights insights={aiInsights} isLoading={isFetchingAI} onRefresh={fetchRealInsights} />
+              <SmartImporter accounts={accounts} categories={categories} onImport={(txs) => setTransactions(prev => [...txs.map(t => ({...t, id: `tx_${Date.now()}_${Math.random()}`})), ...prev])} />
+            </div>
+          </div>
         )}
         
         {activeTab === 'transactions' && (
@@ -252,24 +276,17 @@ const App: React.FC = () => {
         {activeTab === 'accounts' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in">
             {processedAccounts.map(acc => (
-              <div key={acc.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 group transition-all hover:shadow-xl hover:-translate-y-1 relative">
-                <div className="flex justify-between items-start mb-2">
+              <div key={acc.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 group transition-all hover:shadow-xl hover:-translate-y-1 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-slate-50/50 rounded-full -mr-12 -mt-12 transition-all group-hover:scale-110"></div>
+                <div className="flex justify-between items-start mb-2 relative z-10">
                    <div>
                      <h4 className="font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{acc.name}</h4>
-                     <span className="text-[9px] bg-slate-50 text-slate-400 px-2 py-0.5 rounded-full font-black uppercase mt-1 w-fit block">{acc.type}</span>
+                     <span className="text-[9px] bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full font-black uppercase mt-1 w-fit block">{acc.type}</span>
                    </div>
                 </div>
-                <p className={`text-2xl font-black mt-3 ${acc.currentBalance < 0 ? 'text-rose-600' : 'text-slate-800'}`}>{formatCurrency(acc.currentBalance, currency)}</p>
-                <div className="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Master Credit</span>
-                  <span className="text-[10px] font-black text-indigo-500 uppercase">Manage →</span>
-                </div>
+                <p className={`text-2xl font-black mt-3 relative z-10 ${acc.currentBalance < 0 ? 'text-rose-600' : 'text-slate-800'}`}>{formatCurrency(acc.currentBalance, currency)}</p>
               </div>
             ))}
-            <button className="border-4 border-dashed border-slate-100 rounded-[2rem] p-6 text-slate-300 hover:text-indigo-500 hover:border-indigo-100 transition-all flex flex-col items-center justify-center font-black uppercase text-[10px] tracking-[0.2em] min-h-[160px]">
-              <span className="text-3xl mb-2">+</span>
-              New Asset
-            </button>
           </div>
         )}
 

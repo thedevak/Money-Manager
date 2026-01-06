@@ -26,7 +26,6 @@
       background: #cbd5e1;
       border-radius: 10px;
     }
-    /* Simple animation for mounting */
     .animate-in {
       animation: fadeIn 0.4s ease-out;
     }
@@ -35,6 +34,15 @@
       to { opacity: 1; transform: translateY(0); }
     }
   </style>
+  <script>
+    // Vital shim to prevent "process is not defined" crashes in browser
+    window.process = { 
+      env: { 
+        NODE_ENV: 'production',
+        API_KEY: '' // Will be populated by the environment if available
+      } 
+    };
+  </script>
 <script type="importmap">
 {
   "imports": {
