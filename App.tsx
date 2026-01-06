@@ -20,7 +20,7 @@ const PASSWORD_KEY = 'fintrack_admin_passphrase';
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  // 1. Initialize authentication state synchronously from localStorage
+  // Robust synchronous initialization for session persistence
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
     try {
       return localStorage.getItem(SESSION_KEY) === 'true';
@@ -43,7 +43,7 @@ const App: React.FC = () => {
   const [isFetchingAI, setIsFetchingAI] = useState(false);
   const isInitialLoad = useRef(true);
 
-  // 2. Load financial data from Local Storage immediately after login check
+  // Load data from Local Storage only
   useEffect(() => {
     if (isLoggedIn) {
       const loadVault = () => {
@@ -60,13 +60,13 @@ const App: React.FC = () => {
             setBudgets(data.budgets || INITIAL_BUDGETS);
             setAiInsights(data.aiInsights || []);
           } catch (e) {
-            console.warn("Vault data corrupted, falling back to defaults.");
+            console.warn("Vault recovery triggered due to parse error.");
             setAccounts(INITIAL_ACCOUNTS);
             setTransactions(INITIAL_TRANSACTIONS);
             setCategories(INITIAL_CATEGORIES);
           }
         } else {
-          // New User Setup
+          // Defaults for first-time login
           setAccounts(INITIAL_ACCOUNTS);
           setTransactions(INITIAL_TRANSACTIONS);
           setAlerts(INITIAL_ALERTS);
@@ -84,7 +84,7 @@ const App: React.FC = () => {
     }
   }, [isLoggedIn]);
 
-  // 3. Persist data changes to LocalStorage
+  // Direct persistence to localStorage on every state update
   useEffect(() => {
     if (isInitialLoad.current || !isLoggedIn) return;
     
@@ -108,7 +108,7 @@ const App: React.FC = () => {
       localStorage.setItem(SESSION_KEY, 'true');
       setIsLoggedIn(true);
     } else {
-      alert('Unauthorized access attempt. Hint: admin123');
+      alert('Access Denied. Default key is admin123');
     }
   };
 
@@ -119,7 +119,7 @@ const App: React.FC = () => {
 
   const updatePassword = (newPass: string) => {
     localStorage.setItem(PASSWORD_KEY, newPass);
-    alert('Access Key updated locally.');
+    alert('Vault Access Key updated.');
   };
 
   const handleImportData = (data: any) => {
@@ -127,96 +127,93 @@ const App: React.FC = () => {
       setAccounts(data.accounts);
       setTransactions(data.transactions || []);
       setCategories(data.categories || INITIAL_CATEGORIES);
-      alert('Vault data imported and saved.');
+      alert('Vault data restored successfully.');
     }
   };
 
   const resetAllData = () => {
-    if (window.confirm("ARE YOU SURE? This will permanently delete all local financial records.")) {
+    if (window.confirm("CRITICAL: This will permanently erase all financial records stored on this device. Proceed?")) {
       setAccounts(INITIAL_ACCOUNTS);
       setTransactions(INITIAL_TRANSACTIONS);
       setCategories(INITIAL_CATEGORIES);
       setBudgets(INITIAL_BUDGETS);
       setAlerts(INITIAL_ALERTS);
       localStorage.removeItem(LOCAL_STORAGE_KEY);
-      alert('Vault data has been wiped.');
+      alert('Vault cleared.');
     }
   };
 
   const fetchRealInsights = async () => {
     setIsFetchingAI(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: "Financial insights for India today: Market trends, inflation, and 3 actionable wealth tips.",
+        contents: "Daily financial summary for India: Current Repo rate, Market indices, and 3 wealth management tips.",
         config: { tools: [{ googleSearch: {} }] },
       });
       const newInsight: AIInsight = {
         id: Date.now().toString(),
-        text: response.text || "No insights available.",
-        sources: response.candidates?.[0]?.groundingMetadata?.groundingChunks?.filter(c => c.web).map(c => ({ title: c.web!.title || 'Source', uri: c.web!.uri })) || [],
+        text: response.text || "Unable to retrieve insights.",
+        sources: response.candidates?.[0]?.groundingMetadata?.groundingChunks?.filter(c => c.web).map(c => ({ title: c.web!.title || 'Market Source', uri: c.web!.uri })) || [],
         timestamp: new Date().toISOString()
       };
       setAiInsights(prev => [newInsight, ...prev].slice(0, 3));
     } catch (e) {
-      console.error("AI Insight Error:", e);
+      console.error("AI Context Error:", e);
     } finally {
       setIsFetchingAI(false);
     }
   };
 
-  // Render Loading State
   if (isLoading) {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center">
-        <div className="w-16 h-16 border-4 border-slate-100 border-t-indigo-600 rounded-full animate-spin mb-6"></div>
-        <p className="text-slate-400 font-black uppercase tracking-[0.4em] text-[10px]">Unlocking Secure Ledger...</p>
+        <div className="w-12 h-12 border-4 border-slate-100 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
+        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.3em]">Deciphering Vault...</p>
       </div>
     );
   }
 
-  // Render Login Screen
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-[2.5rem] shadow-2xl p-10 border border-slate-100 animate-in">
           <div className="text-center mb-10">
-            <div className="w-20 h-20 bg-indigo-600 rounded-3xl text-white text-4xl flex items-center justify-center mx-auto mb-6 font-black shadow-xl shadow-indigo-200">FP</div>
-            <h1 className="text-3xl font-black text-slate-800 tracking-tight">FinTrack Pro</h1>
-            <p className="text-slate-400 font-medium mt-2">Personal Wealth Architect</p>
+            <div className="w-16 h-16 bg-indigo-600 rounded-2xl text-white text-3xl flex items-center justify-center mx-auto mb-6 font-black shadow-lg shadow-indigo-100">FP</div>
+            <h1 className="text-2xl font-black text-slate-800 tracking-tight">Vault Access</h1>
+            <p className="text-slate-400 text-xs font-medium mt-1">Local Identity Verification Required</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-6">
             <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Vault Key</label>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Access Passphrase</label>
               <input 
                 type="password" 
-                className="w-full border-2 border-slate-100 bg-slate-50 rounded-2xl px-6 py-5 outline-none text-slate-900 focus:border-indigo-600 focus:bg-white transition-all text-center text-xl tracking-[0.4em] font-bold" 
+                className="w-full border-2 border-slate-100 bg-slate-50 rounded-2xl px-6 py-4 outline-none text-slate-900 focus:border-indigo-600 focus:bg-white transition-all text-center text-xl tracking-[0.4em] font-bold" 
                 placeholder="••••••••" 
                 value={passwordInput} 
                 onChange={(e) => setPasswordInput(e.target.value)} 
                 autoFocus 
               />
             </div>
-            <button type="submit" className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-lg shadow-indigo-100 transition-all active:scale-[0.98] hover:bg-indigo-700 uppercase tracking-widest">Open Ledger</button>
+            <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-indigo-100 transition-all active:scale-[0.98] hover:bg-indigo-700 uppercase tracking-widest text-sm">Unlock Ledger</button>
           </form>
-          <div className="mt-10 flex items-center justify-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">AES-256 Client Isolation</span>
+          <div className="mt-10 pt-6 border-t border-slate-50 flex items-center justify-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">100% Local-First Encryption</span>
           </div>
         </div>
       </div>
     );
   }
 
-  // Render Main App
   return (
     <Layout activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout}>
       <div className="max-w-7xl mx-auto space-y-8 pb-12">
         <div className="flex justify-end -mb-4">
            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border bg-emerald-50 border-emerald-100">
-             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-             <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Local Vault Secured</span>
+             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+             <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600">Local Storage Active</span>
            </div>
         </div>
 
