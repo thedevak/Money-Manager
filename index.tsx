@@ -12,7 +12,11 @@ interface State {
   error?: Error;
 }
 
-class ErrorBoundary extends Component<Props, State> {
+/**
+ * Fixed inheritance by explicitly extending React.Component. 
+ * This ensures 'this.props' is correctly recognized by TypeScript and matches the P generic type parameter.
+ */
+class ErrorBoundary extends React.Component<Props, State> {
   public state: State = {
     hasError: false
   };
@@ -59,6 +63,7 @@ class ErrorBoundary extends Component<Props, State> {
       );
     }
 
+    // Accessing children from props. Props is inherited from React.Component<Props, State>
     return this.props.children;
   }
 }

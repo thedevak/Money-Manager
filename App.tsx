@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import TransactionManager from './components/TransactionManager';
+import AccountManager from './components/AccountManager';
 import CategoryManager from './components/CategoryManager';
 import BudgetManager from './components/BudgetManager';
 import AIInsights from './components/AIInsights';
@@ -11,7 +12,7 @@ import Settings from './components/Settings';
 import { Account, Transaction, DueAlert, Category, AccountType, TransactionType, Budget, AIInsight } from './types';
 import { INITIAL_ACCOUNTS, INITIAL_TRANSACTIONS, INITIAL_ALERTS, INITIAL_CATEGORIES, INITIAL_BUDGETS } from './constants';
 import { recalculateBalances, formatCurrency } from './utils/financeLogic';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 
 const LOCAL_STORAGE_KEY = 'fintrack_vault_v1';
 const SESSION_KEY = 'fintrack_session_active';
@@ -20,7 +21,6 @@ const PASSWORD_KEY = 'fintrack_vault_key';
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  // Safe session initialization
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
     try {
       return localStorage.getItem(SESSION_KEY) === 'true';
@@ -33,7 +33,6 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const currency = 'INR';
 
-  // Initialize all states with empty arrays to prevent mapping over null/undefined
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [alerts, setAlerts] = useState<DueAlert[]>([]);
@@ -42,9 +41,9 @@ const App: React.FC = () => {
   const [aiInsights, setAiInsights] = useState<AIInsight[]>([]);
 
   const [isFetchingAI, setIsFetchingAI] = useState(false);
+  const [isFetchingAlerts, setIsFetchingAlerts] = useState(false);
   const isHydrated = useRef(false);
 
-  // Load local data on mount or login
   useEffect(() => {
     if (!isLoggedIn) {
       setIsLoading(false);
@@ -63,7 +62,6 @@ const App: React.FC = () => {
           setBudgets(parsed.budgets || INITIAL_BUDGETS);
           setAiInsights(parsed.aiInsights || []);
         } else {
-          // New user defaults
           setAccounts(INITIAL_ACCOUNTS);
           setTransactions(INITIAL_TRANSACTIONS);
           setAlerts(INITIAL_ALERTS);
@@ -71,7 +69,6 @@ const App: React.FC = () => {
           setBudgets(INITIAL_BUDGETS);
         }
       } catch (e) {
-        console.error("Storage hydration failure, resetting to defaults:", e);
         setAccounts(INITIAL_ACCOUNTS);
         setTransactions(INITIAL_TRANSACTIONS);
         setCategories(INITIAL_CATEGORIES);
@@ -84,7 +81,13 @@ const App: React.FC = () => {
     hydrateFromStorage();
   }, [isLoggedIn]);
 
-  // Sync back to storage on change
+  // Proactive Data Fetching: If alerts are empty on first load, fetch real market alerts
+  useEffect(() => {
+    if (isLoggedIn && isHydrated.current && alerts.length === 0 && !isFetchingAlerts) {
+      fetchMarketAlerts();
+    }
+  }, [isLoggedIn, alerts.length]);
+
   useEffect(() => {
     if (!isLoggedIn || !isHydrated.current) return;
     
@@ -93,7 +96,7 @@ const App: React.FC = () => {
         const dataToStore = { accounts, transactions, alerts, categories, budgets, aiInsights };
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToStore));
       } catch (err) {
-        console.error("Failed to sync vault to local storage:", err);
+        console.error("Failed to sync vault:", err);
       }
     }, 400);
 
@@ -101,7 +104,6 @@ const App: React.FC = () => {
   }, [accounts, transactions, alerts, categories, budgets, aiInsights, isLoggedIn]);
 
   const processedAccounts = useMemo(() => {
-    // Return base accounts if none are loaded yet to prevent processing empty state
     if (accounts.length === 0) return INITIAL_ACCOUNTS;
     return recalculateBalances(accounts, transactions);
   }, [accounts, transactions]);
@@ -124,52 +126,89 @@ const App: React.FC = () => {
 
   const updatePassword = (newPass: string) => {
     localStorage.setItem(PASSWORD_KEY, newPass);
-    alert('Vault key successfully rotated.');
-  };
-
-  const handleImportData = (data: any) => {
-    if (data && typeof data === 'object') {
-      setAccounts(data.accounts || []);
-      setTransactions(data.transactions || []);
-      setCategories(data.categories || INITIAL_CATEGORIES);
-      alert('Vault migration successful.');
-    }
+    alert('Vault key rotated.');
   };
 
   const resetAllData = () => {
-    if (window.confirm("CRITICAL: This will erase all financial records on this device. Continue?")) {
-      setAccounts(INITIAL_ACCOUNTS);
-      setTransactions(INITIAL_TRANSACTIONS);
-      setCategories(INITIAL_CATEGORIES);
-      setBudgets(INITIAL_BUDGETS);
-      setAlerts(INITIAL_ALERTS);
+    if (window.confirm("Wipe all records?")) {
       localStorage.removeItem(LOCAL_STORAGE_KEY);
       window.location.reload();
+    }
+  };
+
+  const fetchMarketAlerts = async () => {
+    setIsFetchingAlerts(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const now = new Date();
+      const monthYear = now.toLocaleString('default', { month: 'long', year: 'numeric' });
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Research and list 4-6 specific, real upcoming Indian financial deadlines for individuals and small businesses for ${monthYear} and early next month. Include ITR filing dates, GST payment deadlines, RBI MPC meetings, or major bank holiday impacts on clearing. Return as a JSON array of objects.`,
+        config: {
+          tools: [{ googleSearch: {} }],
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                title: { type: Type.STRING, description: 'Descriptive title of the deadline' },
+                amount: { type: Type.NUMBER, description: 'Estimated common amount or 0 if varies' },
+                dueDate: { type: Type.STRING, description: 'YYYY-MM-DD' },
+                type: { type: Type.STRING, description: 'EMI, CREDIT_CARD, LOAN, or SUBSCRIPTION (use closest match)' }
+              },
+              required: ['title', 'dueDate', 'type']
+            }
+          }
+        },
+      });
+
+      const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks
+          ?.filter(c => c.web)
+          .map(c => ({ title: c.web!.title || 'Verified Source', uri: c.web!.uri })) || [];
+
+      const fetchedData = JSON.parse(response.text || '[]');
+      const newAlerts: DueAlert[] = fetchedData.map((a: any) => ({
+        ...a,
+        id: `market_${Date.now()}_${Math.random()}`,
+        isPaid: false,
+        isMarketData: true,
+        sources: sources
+      }));
+
+      setAlerts(prev => {
+        const existingTitles = new Set(prev.map(p => p.title.toLowerCase()));
+        const filtered = newAlerts.filter(na => !existingTitles.has(na.title.toLowerCase()));
+        return [...prev, ...filtered];
+      });
+
+    } catch (e) {
+      console.error("Market Alert Fetch Failure:", e);
+    } finally {
+      setIsFetchingAlerts(false);
     }
   };
 
   const fetchRealInsights = async () => {
     setIsFetchingAI(true);
     try {
-      const apiKey = process.env.API_KEY || '';
-      if (!apiKey) throw new Error("Encryption Key Missing");
-      
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: "Current financial climate in India: Interest rates, inflation trends, and 3 wealth management tips.",
+        contents: "Analyze current Indian financial trends for the current week: Interest rate predictions, inflation data, and 2 tactical wealth management moves.",
         config: { tools: [{ googleSearch: {} }] },
       });
       
       const newInsight: AIInsight = {
         id: Date.now().toString(),
-        text: response.text || "Context engine returned no data.",
+        text: response.text || "No current market context available.",
         sources: response.candidates?.[0]?.groundingMetadata?.groundingChunks
           ?.filter(c => c.web)
-          .map(c => ({ title: c.web!.title || 'Market Source', uri: c.web!.uri })) || [],
+          .map(c => ({ title: c.web!.title || 'Financial Source', uri: c.web!.uri })) || [],
         timestamp: new Date().toISOString()
       };
-      
       setAiInsights(prev => [newInsight, ...prev].slice(0, 3));
     } catch (e) {
       console.error("Intelligence failure:", e);
@@ -178,40 +217,29 @@ const App: React.FC = () => {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8">
-        <div className="w-12 h-12 border-4 border-slate-100 border-t-indigo-600 rounded-full animate-spin"></div>
-        <p className="mt-6 text-[10px] text-slate-400 font-bold uppercase tracking-[0.3em] animate-pulse">Decrypting Financial Ledger...</p>
-      </div>
-    );
-  }
+  if (isLoading) return <div className="flex h-screen items-center justify-center bg-white font-bold text-slate-400">LOADING VAULT...</div>;
 
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-[2.5rem] shadow-2xl p-10 border border-slate-100 animate-in">
           <div className="text-center mb-10">
-            <div className="w-16 h-16 bg-indigo-600 rounded-2xl text-white text-3xl flex items-center justify-center mx-auto mb-6 font-black shadow-lg">FP</div>
+            <div className="w-16 h-16 bg-indigo-600 rounded-2xl text-white text-3xl flex items-center justify-center mx-auto mb-6 font-black shadow-lg shadow-indigo-100">FP</div>
             <h1 className="text-2xl font-black text-slate-800 tracking-tight">Vault Access</h1>
-            <p className="text-slate-400 text-xs font-medium mt-1">Identity Confirmation Required</p>
+            <p className="text-xs text-slate-400 font-bold mt-2 uppercase tracking-widest">Master Identity Check</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Master Keyphrase</label>
-              <input 
-                type="password" 
-                className="w-full border-2 border-slate-100 bg-slate-50 rounded-2xl px-6 py-4 outline-none text-slate-900 focus:border-indigo-600 focus:bg-white transition-all text-center text-xl tracking-[0.4em] font-bold" 
-                placeholder="••••••••" 
-                value={passwordInput} 
-                onChange={(e) => setPasswordInput(e.target.value)} 
-                autoFocus 
-              />
-            </div>
-            <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-indigo-100 transition-all active:scale-[0.98]">UNLOCK SYSTEM</button>
+            <input 
+              type="password" 
+              className="w-full border-2 border-slate-100 bg-slate-50 rounded-2xl px-6 py-4 outline-none text-center text-xl tracking-[0.4em] font-bold text-slate-800 focus:border-indigo-600 focus:bg-white transition-all" 
+              placeholder="••••••••" 
+              value={passwordInput} 
+              onChange={(e) => setPasswordInput(e.target.value)} 
+            />
+            <button type="submit" className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-indigo-100 active:scale-[0.98] transition-all">UNLOCK SYSTEM</button>
           </form>
-          <div className="mt-10 pt-6 border-t border-slate-50 flex items-center justify-center gap-2">
-            <span className="text-[9px] font-bold text-slate-300 uppercase tracking-[0.2em]">Initial Key: admin123</span>
+          <div className="mt-8 text-center">
+            <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">Initial Access Code: admin123</p>
           </div>
         </div>
       </div>
@@ -228,15 +256,14 @@ const App: React.FC = () => {
               transactions={transactions} 
               alerts={alerts} 
               categories={categories}
-              currency={currency} 
+              currency={currency}
+              onFetchMarketAlerts={fetchMarketAlerts}
+              isFetchingAlerts={isFetchingAlerts}
+              onMarkAsPaid={(id) => setAlerts(prev => prev.map(a => a.id === id ? {...a, isPaid: true} : a))}
             />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               <AIInsights insights={aiInsights} isLoading={isFetchingAI} onRefresh={fetchRealInsights} />
-              <SmartImporter 
-                accounts={accounts} 
-                categories={categories} 
-                onImport={(txs) => setTransactions(prev => [...txs.map(t => ({...t, id: `tx_${Date.now()}_${Math.random()}`})), ...prev])} 
-              />
+              <SmartImporter accounts={accounts} categories={categories} onImport={(txs) => setTransactions(prev => [...txs.map(t => ({...t, id: `tx_${Date.now()}`})), ...prev])} />
             </div>
           </div>
         )}
@@ -251,24 +278,18 @@ const App: React.FC = () => {
         )}
 
         {activeTab === 'accounts' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in">
-            {processedAccounts.map(acc => (
-              <div key={acc.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 group transition-all hover:shadow-xl relative overflow-hidden">
-                <div className="flex justify-between items-start mb-2 relative z-10">
-                   <div>
-                     <h4 className="font-bold text-slate-800">{acc.name}</h4>
-                     <span className="text-[9px] bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full font-black uppercase mt-1 w-fit block">{acc.type}</span>
-                   </div>
-                </div>
-                <p className={`text-2xl font-black mt-3 relative z-10 ${acc.currentBalance < 0 ? 'text-rose-600' : 'text-slate-800'}`}>{formatCurrency(acc.currentBalance, currency)}</p>
-              </div>
-            ))}
-          </div>
+          <AccountManager 
+            accounts={processedAccounts}
+            currency={currency}
+            onAddAccount={(acc) => setAccounts(prev => [...prev, { ...acc, id: `acc_${Date.now()}`, currentBalance: acc.openingBalance, status: 'ACTIVE' }])}
+            onUpdateAccount={(id, u) => setAccounts(prev => prev.map(a => a.id === id ? { ...a, ...u } : a))}
+            onDeleteAccount={(id) => setAccounts(prev => prev.filter(a => a.id !== id))}
+          />
         )}
 
         {activeTab === 'categories' && <CategoryManager categories={categories} onAddCategory={(c) => setCategories(prev => [...prev, {...c, id: `cat_${Date.now()}`}])} onUpdateCategory={(id, u) => setCategories(prev => prev.map(c => c.id === id ? {...c, ...u} : c))} onDeleteCategory={(id) => setCategories(prev => prev.filter(c => c.id !== id))} />}
         {activeTab === 'budgets' && <BudgetManager budgets={budgets} categories={categories} transactions={transactions} currency={currency} onAddBudget={(b) => setBudgets(prev => [...prev, {...b, id: `b_${Date.now()}`}])} onUpdateBudget={(id, u) => setBudgets(prev => prev.map(b => b.id === id ? {...b, ...u} : b))} onDeleteBudget={(id) => setBudgets(prev => prev.filter(b => b.id !== id))} />}
-        {activeTab === 'settings' && <Settings accounts={accounts} transactions={transactions} categories={categories} onResetData={resetAllData} onUpdatePassword={updatePassword} onImportData={handleImportData} />}
+        {activeTab === 'settings' && <Settings accounts={accounts} transactions={transactions} categories={categories} onResetData={resetAllData} onUpdatePassword={updatePassword} onImportData={(d) => setAccounts(d.accounts)} />}
       </div>
     </Layout>
   );

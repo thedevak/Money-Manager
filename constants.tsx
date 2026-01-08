@@ -25,11 +25,8 @@ export const INITIAL_TRANSACTIONS: Transaction[] = [
   { id: 'tx_3', date: '2024-05-05', amount: 1000, type: TransactionType.TRANSFER, fromAccountId: 'acc_1', toAccountId: 'acc_3', notes: 'Credit Card Payment' }
 ];
 
-export const INITIAL_ALERTS: DueAlert[] = [
-  { id: 'al_1', title: 'Home Loan EMI', amount: 1200, dueDate: '2024-06-05', type: 'EMI', isPaid: false },
-  { id: 'al_2', title: 'Visa Statement', amount: 500, dueDate: '2024-06-15', type: 'CREDIT_CARD', isPaid: false },
-  { id: 'al_3', title: 'Netflix', amount: 15.99, dueDate: '2024-06-20', type: 'SUBSCRIPTION', isPaid: false }
-];
+// Removed dummy alerts: EMI, Visa, Netflix. User will now see real market data.
+export const INITIAL_ALERTS: DueAlert[] = [];
 
 export const INITIAL_BUDGETS: Budget[] = [
   { id: 'b_1', categoryId: 'cat_1', amount: 600, period: 'MONTHLY' },

@@ -14,11 +14,13 @@ const SmartImporter: React.FC<SmartImporterProps> = ({ accounts, categories, onI
   const [isProcessing, setIsProcessing] = useState(false);
   const [results, setResults] = useState<Omit<Transaction, 'id'>[] | null>(null);
 
+  // Parsing bank statements is a reasoning-heavy task, so we use Pro model.
   const handleProcess = async () => {
     if (!rawText.trim()) return;
     setIsProcessing(true);
     
     try {
+      // Create a new instance right before making an API call to ensure latest key is used.
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       const prompt = `
@@ -30,8 +32,9 @@ const SmartImporter: React.FC<SmartImporterProps> = ({ accounts, categories, onI
         ${rawText}
       `;
 
+      // Upgraded to gemini-3-pro-preview for advanced reasoning on financial data.
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-3-pro-preview',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -53,7 +56,8 @@ const SmartImporter: React.FC<SmartImporterProps> = ({ accounts, categories, onI
         }
       });
 
-      const parsed = JSON.parse(response.text);
+      // Directly access .text property as per SDK documentation.
+      const parsed = JSON.parse(response.text || '[]');
       setResults(parsed);
     } catch (error) {
       console.error("AI Parsing Error:", error);

@@ -50,6 +50,8 @@ export interface DueAlert {
   dueDate: string;
   type: 'LOAN' | 'EMI' | 'CREDIT_CARD' | 'SUBSCRIPTION';
   isPaid: boolean;
+  sources?: { title: string; uri: string }[]; // Added for Search Grounding compliance
+  isMarketData?: boolean; // Tag for identifying AI-generated content
 }
 
 export interface Budget {
