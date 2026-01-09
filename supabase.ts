@@ -3,18 +3,20 @@ import { createClient } from '@supabase/supabase-js';
 
 /**
  * Retrieve credentials from the environment.
- * These are injected via window.process.env in the index.html or Vercel.
+ * Values are populated in index.html for this project.
  */
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.SUPABASE_URL?.trim();
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY?.trim();
 
 /**
- * We export the client only if configuration is present.
- * This prevents '@supabase/supabase-js' from throwing an "Uncaught Error: supabaseUrl is required" 
- * which would crash the entire JS bundle before any React code can run.
+ * Validation flag to ensure we don't call createClient with invalid/empty parameters.
  */
-export const isConfigured = !!(supabaseUrl && supabaseAnonKey && supabaseUrl.length > 0);
+export const isConfigured = !!(supabaseUrl && supabaseAnonKey && supabaseUrl.startsWith('http'));
 
+/**
+ * Create the client singleton. 
+ * Using a proxy-safe approach to avoid crashing the module if not configured.
+ */
 export const supabase = isConfigured 
   ? createClient(supabaseUrl!, supabaseAnonKey!) 
   : null as any;

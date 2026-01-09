@@ -36,15 +36,15 @@
   </style>
   <script>
     /**
-     * In Production (Vercel), these values are injected via the Environment Variables.
-     * Locally, they should be set in your .env file or local environment.
+     * FinTrack Pro Cloud Configuration
+     * In Production (Vercel), these values can also be injected via Environment Variables.
      */
     window.process = { 
       env: { 
         NODE_ENV: 'production',
-        API_KEY: '', // Injected by Vercel
-        SUPABASE_URL: '', // Leave empty here, set in Vercel Dashboard
-        SUPABASE_ANON_KEY: '' // Leave empty here, set in Vercel Dashboard
+        API_KEY: '', // Gemini API Key (Injected externally)
+        SUPABASE_URL: 'https://wnkapzjomjhdramtyslo.supabase.co',
+        SUPABASE_ANON_KEY: 'sb_publishable_hl7Zjo8eqUWeNLx5vuIKJQ_7cvOJruC'
       } 
     };
   </script>

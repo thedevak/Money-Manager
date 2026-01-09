@@ -54,11 +54,11 @@ const App: React.FC = () => {
             <div className="bg-black/40 rounded-2xl p-6 font-mono text-sm space-y-3 border border-white/5">
               <div className="flex justify-between items-center opacity-60">
                 <span>SUPABASE_URL</span>
-                <span className="text-rose-400 text-xs">MISSING</span>
+                <span className="text-rose-400 text-xs">{process.env.SUPABASE_URL ? 'PRESENT' : 'MISSING'}</span>
               </div>
               <div className="flex justify-between items-center opacity-60">
                 <span>SUPABASE_ANON_KEY</span>
-                <span className="text-rose-400 text-xs">MISSING</span>
+                <span className="text-rose-400 text-xs">{process.env.SUPABASE_ANON_KEY ? 'PRESENT' : 'MISSING'}</span>
               </div>
             </div>
 
@@ -89,6 +89,8 @@ const App: React.FC = () => {
 
   // 2. Auth Listener
   useEffect(() => {
+    if (!supabase) return;
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session) fetchAllData();
@@ -198,7 +200,7 @@ const App: React.FC = () => {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    if (supabase) await supabase.auth.signOut();
   };
 
   if (isLoading) return (
