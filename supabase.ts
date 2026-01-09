@@ -1,20 +1,20 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// Retrieve credentials from the environment
+/**
+ * Retrieve credentials from the environment.
+ * These are injected via window.process.env in the index.html or Vercel.
+ */
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 
 /**
- * Validates that the cloud infrastructure is reachable.
- * If these logs appear in Vercel, it means you forgot to add the variables in Settings.
+ * We export the client only if configuration is present.
+ * This prevents '@supabase/supabase-js' from throwing an "Uncaught Error: supabaseUrl is required" 
+ * which would crash the entire JS bundle before any React code can run.
  */
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn(
-    "FINTRACK ARCHITECT NOTICE: Supabase credentials missing. " +
-    "Ensure SUPABASE_URL and SUPABASE_ANON_KEY are set in your Vercel Environment Variables."
-  );
-}
+export const isConfigured = !!(supabaseUrl && supabaseAnonKey && supabaseUrl.length > 0);
 
-// Initialize the singleton client
-export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
+export const supabase = isConfigured 
+  ? createClient(supabaseUrl!, supabaseAnonKey!) 
+  : null as any;
