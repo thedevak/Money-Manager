@@ -1,5 +1,5 @@
 
-import { Account, AccountType, Transaction, TransactionType, Category } from '../types';
+import { Account, AccountType, Transaction, TransactionType, Category, Budget } from '../types';
 
 /**
  * Recalculates all account balances based on opening balance and transaction history.
@@ -41,6 +41,20 @@ export const recalculateBalances = (accounts: Account[], transactions: Transacti
 };
 
 /**
+ * Calculates the "Delta" (Change) between two time periods.
+ * Returns the numeric difference and the percentage change.
+ */
+export const calculateDelta = (current: number, previous: number) => {
+  const diff = current - previous;
+  const percent = previous === 0 ? 0 : (diff / Math.abs(previous)) * 100;
+  return {
+    diff,
+    percent,
+    isPositive: diff >= 0
+  };
+};
+
+/**
  * Calculates total spent for a category (and its subcategories) in a specific month/year.
  */
 export const calculateSpentForCategory = (
@@ -50,7 +64,6 @@ export const calculateSpentForCategory = (
   month: number, // 0-11
   year: number
 ): number => {
-  // Find all category IDs to include (the parent + any children)
   const childIds = categories.filter(c => c.parentId === categoryId).map(c => c.id);
   const targetIds = [categoryId, ...childIds];
 
@@ -74,8 +87,8 @@ export const formatCurrency = (amount: number, currencyCode: string = 'INR') => 
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   }).format(amount);
 };
 

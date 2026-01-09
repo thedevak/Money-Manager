@@ -6,7 +6,7 @@ import { formatCurrency } from '../utils/financeLogic';
 interface AccountManagerProps {
   accounts: Account[];
   currency: string;
-  onAddAccount: (account: Omit<Account, 'id' | 'currentBalance' | 'status'>) => void;
+  onAddAccount: (account: any) => void;
   onUpdateAccount: (id: string, updates: Partial<Account>) => void;
   onDeleteAccount: (id: string) => void;
 }
@@ -45,14 +45,28 @@ const AccountManager: React.FC<AccountManagerProps> = ({
     setShowModal(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingAccount) {
-      onUpdateAccount(editingAccount.id, formData);
-    } else {
-      onAddAccount(formData);
+    try {
+      // Create a clean payload object
+      const payload: any = { ...formData };
+      
+      // Strict cleaning: if dueDate is empty and not applicable, remove it
+      if (!payload.dueDate) {
+        delete payload.dueDate;
+      }
+
+      if (editingAccount) {
+        await onUpdateAccount(editingAccount.id, payload);
+      } else {
+        await onAddAccount(payload);
+      }
+      setShowModal(false);
+    } catch (err: any) {
+      const errorMsg = err?.message || "Vault sync failed. Check cloud parameters.";
+      console.error("Account Submit Error:", err);
+      alert(`Vault Error: ${errorMsg}`);
     }
-    setShowModal(false);
   };
 
   const getAccountTypeIcon = (type: AccountType) => {
@@ -85,7 +99,7 @@ const AccountManager: React.FC<AccountManagerProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in">
         {accounts.map(acc => (
           <div key={acc.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 group transition-all hover:shadow-xl relative overflow-hidden flex flex-col justify-between">
-            <div className="absolute top-0 right-0 p-6 opacity-0 group-hover:opacity-100 transition-opacity z-20 flex gap-2">
+            <div className="absolute top-0 right-0 p-6 opacity-0 group-hover:opacity-100 transition-opacity z-20 flex gap-2 text-slate-900">
               <button 
                 onClick={() => handleOpenEdit(acc)}
                 className="p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors"
@@ -94,7 +108,7 @@ const AccountManager: React.FC<AccountManagerProps> = ({
                 ✏️
               </button>
               <button 
-                onClick={() => { if(confirm("Permanently remove this account?")) onDeleteAccount(acc.id); }}
+                onClick={() => { if(window.confirm(`Permanently remove account "${acc.name}"?`)) onDeleteAccount(acc.id); }}
                 className="p-2 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition-colors"
                 title="Delete Account"
               >
@@ -123,17 +137,22 @@ const AccountManager: React.FC<AccountManagerProps> = ({
 
             {acc.dueDate && (
               <div className="pt-4 mt-4 border-t border-slate-50 relative z-10 flex justify-between items-center">
-                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Next Cycle: {new Date(acc.dueDate).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}</span>
+                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Cycle Date: {new Date(acc.dueDate).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}</span>
                  <span className={`w-2 h-2 rounded-full ${acc.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
               </div>
             )}
           </div>
         ))}
+        {accounts.length === 0 && (
+          <div className="col-span-full py-12 text-center text-slate-400 italic">
+            No accounts initialized yet.
+          </div>
+        )}
       </div>
 
       {showModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200 text-slate-900">
             <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
               <h3 className="text-xl font-black text-slate-800 tracking-tight">
                 {editingAccount ? 'Refine Account' : 'Initialize Vault Account'}
@@ -148,7 +167,7 @@ const AccountManager: React.FC<AccountManagerProps> = ({
                     type="text"
                     required
                     className="w-full border-2 border-slate-100 bg-slate-50/50 rounded-2xl px-5 py-3 text-sm font-semibold outline-none focus:border-indigo-600 focus:bg-white transition-all text-slate-900"
-                    placeholder="e.g. Citibank Savings"
+                    placeholder="e.g. Savings Account"
                     value={formData.name}
                     onChange={(e) => setFormData({...formData, name: e.target.value})}
                   />

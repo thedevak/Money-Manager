@@ -1,10 +1,9 @@
-
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { ErrorInfo, ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
 interface Props {
-  children: ReactNode;
+  children?: ReactNode;
 }
 
 interface State {
@@ -13,13 +12,22 @@ interface State {
 }
 
 /**
- * Fixed inheritance by explicitly extending React.Component. 
- * This ensures 'this.props' is correctly recognized by TypeScript and matches the P generic type parameter.
+ * ErrorBoundary component to catch rendering errors and provide a fallback UI.
  */
 class ErrorBoundary extends React.Component<Props, State> {
-  public state: State = {
-    hasError: false
-  };
+  // Explicitly declare state and props to resolve TypeScript errors regarding property recognition.
+  public state: State;
+  public props: Props;
+
+  // Initializing state in constructor to ensure standard React component behavior and type safety.
+  constructor(props: Props) {
+    super(props);
+    // Explicitly assigning props to the class property to ensure visibility for the compiler.
+    this.props = props;
+    this.state = {
+      hasError: false
+    };
+  }
 
   public static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
@@ -63,8 +71,8 @@ class ErrorBoundary extends React.Component<Props, State> {
       );
     }
 
-    // Accessing children from props. Props is inherited from React.Component<Props, State>
-    return this.props.children;
+    // Accessing children from this.props. super(props) ensures 'this.props' is initialized correctly.
+    return this.props.children || null;
   }
 }
 

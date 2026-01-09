@@ -7,7 +7,7 @@ interface SettingsProps {
   transactions: Transaction[];
   categories: Category[];
   onResetData: () => void;
-  onUpdatePassword: (newPass: string) => void;
+  onUpdatePassword: (newPass: string) => Promise<void>;
   onImportData: (data: any) => void;
 }
 
@@ -21,18 +21,31 @@ const Settings: React.FC<SettingsProps> = ({
 }) => {
   const [newPass, setNewPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const handlePasswordUpdate = (e: React.FormEvent) => {
+  const handlePasswordUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPass) return;
+    if (newPass.length < 6) {
+      alert("Password must be at least 6 characters.");
+      return;
+    }
     if (newPass !== confirmPass) {
       alert("Passwords do not match.");
       return;
     }
-    onUpdatePassword(newPass);
-    setNewPass('');
-    setConfirmPass('');
+
+    setIsUpdating(true);
+    try {
+      await onUpdatePassword(newPass);
+      setNewPass('');
+      setConfirmPass('');
+    } catch (err: any) {
+      alert(`Update Failed: ${err.message || "Unknown error"}`);
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,7 +98,7 @@ const Settings: React.FC<SettingsProps> = ({
           <p className="text-slate-500 text-sm">FinTrack Pro Persistence Engine</p>
           <div className="mt-2 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Local Session Active</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Supabase Cloud Active</span>
           </div>
         </div>
       </div>
@@ -100,8 +113,8 @@ const Settings: React.FC<SettingsProps> = ({
               <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">New Vault Passphrase</label>
               <input 
                 type="password" 
-                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-50" 
-                placeholder="Minimum 8 characters"
+                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-50 text-slate-900" 
+                placeholder="Minimum 6 characters"
                 value={newPass}
                 onChange={e => setNewPass(e.target.value)}
               />
@@ -110,15 +123,23 @@ const Settings: React.FC<SettingsProps> = ({
               <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Confirm Passphrase</label>
               <input 
                 type="password" 
-                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-50" 
+                className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-50 text-slate-900" 
                 placeholder="Repeat new passphrase"
                 value={confirmPass}
                 onChange={e => setConfirmPass(e.target.value)}
               />
             </div>
-            <button type="submit" className="w-full bg-slate-900 text-white py-3 rounded-xl text-xs font-bold hover:bg-black transition-all">Update Access Key</button>
+            <button 
+              type="submit" 
+              disabled={isUpdating}
+              className="w-full bg-slate-900 text-white py-3 rounded-xl text-xs font-bold hover:bg-black transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {isUpdating ? (
+                <><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div> SYNCING...</>
+              ) : 'Update Access Key'}
+            </button>
           </form>
-          <p className="text-[10px] text-slate-400 mt-4 italic">The key is stored on this device only.</p>
+          <p className="text-[10px] text-slate-400 mt-4 italic leading-relaxed">Changes take effect immediately across all sessions connected to this Supabase project.</p>
         </div>
 
         <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
@@ -159,7 +180,7 @@ const Settings: React.FC<SettingsProps> = ({
       </div>
 
       <div className="text-center">
-        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-[0.3em]">FinTrack Pro • Device Architecture v3.0</p>
+        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-[0.3em]">FinTrack Pro • Cloud Architecture v4.1</p>
       </div>
     </div>
   );

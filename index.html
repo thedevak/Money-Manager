@@ -35,20 +35,14 @@
     }
   </style>
   <script>
-    // Vital shim to prevent "process is not defined" crashes in browser
     window.process = { 
       env: { 
         NODE_ENV: 'production',
-        API_KEY: '' 
+        API_KEY: '',
+        SUPABASE_URL: 'https://wnkapzjomjhdramtyslo.supabase.co',
+        SUPABASE_ANON_KEY: 'sb_publishable_hl7Zjo8eqUWeNLx5vuIKJQ_7cvOJruC'
       } 
     };
-    
-    // Catch-all for early loading errors
-    window.addEventListener('error', function(event) {
-      if (event.message.includes('importMap')) {
-        console.error('Import map resolution failed:', event);
-      }
-    });
   </script>
 <script type="importmap">
 {
@@ -56,10 +50,12 @@
     "react": "https://esm.sh/react@19.0.0",
     "react-dom": "https://esm.sh/react-dom@19.0.0",
     "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
-    "recharts": "https://esm.sh/recharts@2.15.0?external=react,react-dom",
+    "recharts": "https://esm.sh/recharts@2.15.0?external=react,react-dom&bundle",
     "@google/genai": "https://esm.sh/@google/genai@1.34.0",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.48.1",
+    "idb": "https://esm.sh/idb@8.0.0?bundle",
+    "react/": "https://esm.sh/react@19.0.0/",
+    "react-dom/": "https://esm.sh/react-dom@19.0.0/"
   }
 }
 </script>

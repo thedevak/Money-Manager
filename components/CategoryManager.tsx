@@ -74,8 +74,8 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({
               <div className="flex justify-between items-start mb-3">
                 <h5 className="font-bold text-slate-800">{parent.name}</h5>
                 <div className="flex gap-2">
-                  <button onClick={() => handleOpenEdit(parent)} className="text-slate-400 hover:text-indigo-600 text-xs">Edit</button>
-                  <button onClick={() => onDeleteCategory(parent.id)} className="text-slate-400 hover:text-rose-600 text-xs">Delete</button>
+                  <button onClick={() => handleOpenEdit(parent)} className="text-slate-400 hover:text-indigo-600 text-xs transition-colors">Edit</button>
+                  <button onClick={() => { if(window.confirm("Remove category '" + parent.name + "' and all sub-categories?")) onDeleteCategory(parent.id); }} className="text-slate-400 hover:text-rose-600 text-xs transition-colors">Delete</button>
                 </div>
               </div>
               
@@ -85,7 +85,7 @@ const CategoryManager: React.FC<CategoryManagerProps> = ({
                     <span className="text-slate-600">{sub.name}</span>
                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => handleOpenEdit(sub)} className="text-[10px] text-slate-400 hover:text-indigo-600">Edit</button>
-                      <button onClick={() => onDeleteCategory(sub.id)} className="text-[10px] text-slate-400 hover:text-rose-600">Delete</button>
+                      <button onClick={() => { if(window.confirm("Remove sub-category '" + sub.name + "'?")) onDeleteCategory(sub.id); }} className="text-[10px] text-slate-400 hover:text-rose-600">Delete</button>
                     </div>
                   </div>
                 ))}

@@ -20,11 +20,12 @@ const SmartImporter: React.FC<SmartImporterProps> = ({ accounts, categories, onI
     setIsProcessing(true);
     
     try {
-      // Create a new instance right before making an API call to ensure latest key is used.
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       const prompt = `
         Parse the following bank statement text and extract transactions.
+        Only use the IDs provided below. If a transaction doesn't match a specific account or category, use the best fit or the first available option.
+
         Available Accounts: ${accounts.map(a => `${a.name} (ID: ${a.id})`).join(', ')}
         Available Categories: ${categories.map(c => `${c.name} (ID: ${c.id})`).join(', ')}
 
@@ -32,7 +33,6 @@ const SmartImporter: React.FC<SmartImporterProps> = ({ accounts, categories, onI
         ${rawText}
       `;
 
-      // Upgraded to gemini-3-pro-preview for advanced reasoning on financial data.
       const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
         contents: prompt,
@@ -45,9 +45,9 @@ const SmartImporter: React.FC<SmartImporterProps> = ({ accounts, categories, onI
               properties: {
                 date: { type: Type.STRING, description: 'ISO date YYYY-MM-DD' },
                 amount: { type: Type.NUMBER },
-                type: { type: Type.STRING, description: 'EXPENSE or INCOME' },
-                fromAccountId: { type: Type.STRING, description: 'Matching ID from available accounts' },
-                categoryId: { type: Type.STRING, description: 'Matching ID from available categories' },
+                type: { type: Type.STRING, enum: ['EXPENSE', 'INCOME'] },
+                fromAccountId: { type: Type.STRING },
+                categoryId: { type: Type.STRING },
                 notes: { type: Type.STRING }
               },
               required: ['date', 'amount', 'type', 'fromAccountId', 'notes']
@@ -56,9 +56,18 @@ const SmartImporter: React.FC<SmartImporterProps> = ({ accounts, categories, onI
         }
       });
 
-      // Directly access .text property as per SDK documentation.
       const parsed = JSON.parse(response.text || '[]');
-      setResults(parsed);
+      
+      // Scrub results to ensure valid IDs
+      const scrubbed = parsed.map((tx: any) => ({
+        ...tx,
+        fromAccountId: accounts.some(a => a.id === tx.fromAccountId) ? tx.fromAccountId : (accounts[0]?.id || null),
+        categoryId: categories.some(c => c.id === tx.categoryId) ? tx.categoryId : null,
+        subCategoryId: null,
+        toAccountId: null
+      }));
+
+      setResults(scrubbed);
     } catch (error) {
       console.error("AI Parsing Error:", error);
       alert("Failed to parse statement. Please ensure the text is clear.");
@@ -67,12 +76,16 @@ const SmartImporter: React.FC<SmartImporterProps> = ({ accounts, categories, onI
     }
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (results) {
-      onImport(results);
-      setResults(null);
-      setRawText('');
-      alert(`Imported ${results.length} transactions successfully.`);
+      try {
+        await onImport(results);
+        setResults(null);
+        setRawText('');
+        alert(`Successfully imported ${results.length} transactions to the cloud.`);
+      } catch (err) {
+        alert("Import failed. Check database sync logs.");
+      }
     }
   };
 
@@ -86,7 +99,7 @@ const SmartImporter: React.FC<SmartImporterProps> = ({ accounts, categories, onI
       {!results ? (
         <div className="space-y-4">
           <textarea 
-            className="w-full h-40 border border-slate-200 rounded-xl p-4 text-sm focus:ring-2 focus:ring-indigo-100 outline-none bg-slate-50/50"
+            className="w-full h-40 border border-slate-200 rounded-xl p-4 text-sm focus:ring-2 focus:ring-indigo-100 outline-none bg-slate-50/50 text-slate-800"
             placeholder="Paste your bank statement text here..."
             value={rawText}
             onChange={(e) => setRawText(e.target.value)}

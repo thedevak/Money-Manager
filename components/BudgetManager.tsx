@@ -184,7 +184,7 @@ const BudgetManager: React.FC<BudgetManagerProps> = ({
                       ✏️
                     </button>
                     <button 
-                      onClick={() => onDeleteBudget(budget.id)} 
+                      onClick={() => { if(window.confirm("Delete budget allowance for category '" + (category?.name || 'Unknown') + "'?")) onDeleteBudget(budget.id); }} 
                       className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
                       title="Remove Budget"
                     >
